@@ -77,7 +77,6 @@ async function saveIllust(IID) {
         artworkData["is_ai"] = json["body"]["aiType"] != 1;
         artworkData["rating"] = ratings[json["body"]["xRestrict"]];
         artworkData["created_at"] = json["body"]["createDate"];
-        artworkData["updated_at"] = json["body"]["uploadDate"];
 
         result["data"] = artworkData;
         // end
