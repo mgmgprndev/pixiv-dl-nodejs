@@ -1,27 +1,31 @@
 # pixiv-dl-nodejs
-Pixiv Downloader in Nodejs
+Pixivダウンローダーです。
 
 https://pixiv.net/
 
-# Install 
+**自己責任**でご利用ください。
+
+**個人使用**を意図して作成されています。
+
+お住まいの管轄地域の法律に従ってください。
+
+
+# 依存関係のインストール
+これを実行するだけ：
 `npm install node-fetch adm-zip fluent-ffmpeg`
 
-Just it.
+# テスト済み環境
+**nodejs** v23.3.0
 
-# My env
-```
-$ node -v
-v23.3.0
-$ npm -v
-10.9.0
-```
+**npm** 10.9.0
 
-# DISCLAIMER
-THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE DEVELOPERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+# 免責事項
+このソフトウェアは「現状のまま」提供されており、明示的または暗示的な一切の保証、商品性、特定目的への適合性、権利侵害の有無を含むがそれに限定されない保証はありません。開発者は、このソフトウェアまたはその使用に関連して、契約、不法行為、またはその他の責任に基づくいかなる請求、損害賠償、またはその他の責任にも一切責任を負いません。
+・このソフトウェアは、フェアユースや著作権法の例外（例えば、個人的使用）に準拠した使用、または文化的・教育的な価値のあるアーカイブのために厳格に使用されることを目的としています。
+・このソフトウェアを、海賊版（無許可の再配布）やその他の違法活動には絶対に使用しないでください。
+・このソフトウェアが継続的にメンテナンスされる保証はありません。
+・このソフトウェアは2025年10月29日現在のPixivのAPIを分析して作成されました。
+・このソフトウェアは、健全かつ合理的な目的のためにのみ使用してください。
 
-1. This software downloads artworks from Pixiv.net.
-2. This software is intended STRICTLY for uses compliant with FAIR USE, similar laws, exceptions to copyright law (e.g., PERSONAL USE), or for culturally/educationally valuable archiving.
-3. You MUST NOT use this software for piracy (unauthorized redistribution) or ANY OTHER ILLEGAL ACTIVITIES.
-4. There is NO WARRANTY that this software will be continuously maintained.
-5. This software was created by analyzing Pixiv's API as of October 29, 2025.
-6. Please use this software for SOUND AND RATIONAL purposes ONLY.
+※このソフトウエアは、パブリックドメインに帰しており、本件免責事項は開発者の意図を明確にする目的のみを有す。
+なお、ここでいうパブリックドメインとはライセンス等を用い生み出された、事実上の状態を含む。
