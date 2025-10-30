@@ -39,8 +39,7 @@ var universalHeader = {
 const IID = await ask("Illust Id? ");
 const result = await saveIllust(IID);
 if ( result["success"] ) {
-    const type = result["is_ugoira"] ? "動イラ" : "イラスト";
-    console.log("✅ " + type + "「" +  result["data"]["title"] + "」のダウンロード成功");
+    console.log("✅ " + result["type"] + "「" +  result["data"]["title"] + "」のダウンロード成功");
     console.log("データー：\n" + JSON.stringify(result["data"]));
     console.log("-=".repeat(11).slice(1));
 }
@@ -56,14 +55,17 @@ async function saveIllust(IID) {
     var result = {
         "success": false,
         "data": {},
-        "is_ugoira": null
+        "type": null
     };
 
     if ( json ) {
+        // 0=illust 1=manga 2=ugoira
+        const artworkTypes = {0: "ILLUST", 1: "MANGA", 2: "UGOIRA"};
+
         const isUgoira = json["body"]["illustType"] == 2;
 
         // meta data
-        result["is_ugoira"] = isUgoira;
+        result["type"] = artworkTypes[json["body"]["illustType"]];
 
         var artworkData = {};
         const ratings = {0: "ALL_AGE", 1: "R18", 2: "R18G"};
