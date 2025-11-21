@@ -1,3 +1,12 @@
+/* 
+1. This is now using Selenium (program to controll browser) for bypass Pixiv's WAF. However this could and would get patched very easily.
+2. Solution I am currently looking into is, simulate a normal user's behavior, 
+ and catch and analysis API call & response actually made by browser (website) itself to bypass future potential patch.
+3. Current version is could and would patched. Because it's simply using session data of actuall browser.
+4. Please feel free to give feedback!
+ */
+import { Builder, By, Browser, until, Key } from 'selenium-webdriver';
+import chrome from 'selenium-webdriver/chrome.js';
 import { createWriteStream } from 'fs';
 import { unlink, mkdir, writeFile, stat } from 'fs/promises';
 import { pipeline } from 'stream/promises';
@@ -10,31 +19,59 @@ import ffmpeg from 'fluent-ffmpeg';
 import crypto from 'crypto';
 import readline from 'readline';
 
+setInterval(function () {
+    /* Just for keep this running */
+}, 1000);
+
 const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
+    input: process.stdin,
+    output: process.stdout
 });
 
 const ask = (q) =>
-  new Promise((r) => {
-    rl.question(q, (ans) => {
-      rl.close();
-      r(ans);
-    });
-  });
+    new Promise((r) => rl.question(q, (ans) => r(ans)));
 
-const PHPSESSIDs = [
-    // F12（開発者ツール）> Application で、Cookieをみて。
-    //「PHPSESSID」を取る。
-];
-const PHPSESSID = PHPSESSIDs[Math.floor(Math.random() * PHPSESSIDs.length)];
+const waitLoaded = async () => {
+    await driver.wait(async () => {
+        const readyState = await driver.executeScript('return document.readyState');
+        return readyState === 'complete';
+    }, 10000);
+}
 
+const options = new chrome.Options()
+    .addArguments('--disable-blink-features=AutomationControlled')
+    .excludeSwitches('enable-automation');
+
+const driver = await new Builder()
+    .forBrowser(Browser.CHROME)
+    .setChromeOptions(options)
+    .build();
+
+await driver.get("https://www.pixiv.net");
+const cookie = await driver.manage().getCookie('PHPSESSID');
+await driver.manage().deleteCookie('PHPSESSID');
+await driver.manage().addCookie({
+    name: 'PHPSESSID',
+    /* 有効なセッションIDを入力！ */
+    value: 'REPLACE_ME_REPLACE_ME_REPLACE_ME_REPLACE_ME', 
+    /* 有効なセッションIDを入力！ */
+    domain: cookie.domain,
+    path: cookie.path,
+    secure: cookie.secure,
+    httpOnly: cookie.httpOnly,
+    sameSite: cookie.sameSite
+});
+
+await driver.get("https://www.pixiv.net");
+
+
+await ask('Are the browser logged in? type something to continue...');
 
 const IID = await ask("Illust Id? ");
 const result = await download(IID);
-if ( result["success"] ) {
+if (result["success"]) {
     const data = result["data"];
-    console.log("✅ " + data["type"] + "「" +  data["title"] + "」のダウンロード成功");
+    console.log("✅ " + data["type"] + "「" + data["title"] + "」のダウンロード成功");
     console.log("データー：\n" + JSON.stringify(data));
     console.log("-=".repeat(11).slice(1));
 }
@@ -45,73 +82,71 @@ async function download(sessionKey, artworkId, downloadDir) {
     const TEMP_DIR = "./temp/" + UUID;
     await mkdir(TEMP_DIR, { recursive: true });
 
-    // UNIVERSAL HEADER
-    const RefererUrl = "https://www.pixiv.net/artworks/" + artworkId;
-    var universalHeader = {
-        "User-Agen": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": RefererUrl,
-        "Cookie": "PHPSESSID=" + sessionKey + ";",
+    const headers = {
+        'User-Agent': await driver.executeScript('return navigator.userAgent'),
+        'Cookie': (await driver.manage().getCookies()).map(c => `${c.name}=${c.value}`).join('; '),
+        'Referer': 'https://www.pixiv.net/artworks/' + artworkId
     };
 
     /* ======================= INTERNALLY USED FUNCTIONS DEFINE START ======================= */
     async function fetchSave(originalURL, outPath) {
-      let fileHandleCreated = false;
-      
-      try {
-        const res = await fetch(originalURL, {
-          method: 'GET',
-          headers: universalHeader
-        });
-    
-        if (!res.ok) {
-          throw new Error(`Request failed: ${res.status} ${res.statusText} for URL: ${originalURL}`);
+        let fileHandleCreated = false;
+
+        try {
+            const res = await fetch(originalURL, {
+                method: 'GET',
+                headers: headers
+            });
+
+            if (!res.ok) {
+                throw new Error(`Request failed: ${res.status} ${res.statusText} for URL: ${originalURL}`);
+            }
+
+            if (!res.body) {
+                throw new Error('Response body is null');
+            }
+
+            const dir = dirname(outPath);
+            await mkdir(dir, { recursive: true });
+
+            const fileWriteStream = createWriteStream(outPath);
+            fileHandleCreated = true;
+
+            await pipeline(res.body, fileWriteStream);
+
+            return outPath;
+        } catch (err) {
+            if (fileHandleCreated) {
+                try {
+                    await unlink(outPath);
+                } catch (unlinkErr) {
+                    console.error(`Failed to delete partial file ${outPath} after error:`, unlinkErr);
+                }
+            }
+
+            throw err;
         }
-    
-        if (!res.body) {
-          throw new Error('Response body is null');
-        }
-    
-        const dir = dirname(outPath);
-        await mkdir(dir, { recursive: true });
-        
-        const fileWriteStream = createWriteStream(outPath);
-        fileHandleCreated = true;
-    
-        await pipeline(res.body, fileWriteStream);
-    
-        return outPath;
-      } catch (err) {
-        if (fileHandleCreated) {
-          try {
-            await unlink(outPath);
-          } catch (unlinkErr) {
-            console.error(`Failed to delete partial file ${outPath} after error:`, unlinkErr);
-          }
-        }
-        
-        throw err;
-      }
     }
 
     async function unzip(targetZip, extractPath) {
-      try {
-        await mkdir(extractPath, { recursive: true });
-    
-        const zip = new AdmZip(targetZip);
-    
-        await new Promise((resolve, reject) => {
-          zip.extractAllToAsync(extractPath, true, false, (error) => {
-            if (error) {
-              return reject(error);
-            }
-            resolve();
-          });
-        });
-    
-      } catch (err) {
-        console.error(`Failed to unzip file ${targetZip} to ${extractPath}:`, err);
-        throw err;
-      }
+        try {
+            await mkdir(extractPath, { recursive: true });
+
+            const zip = new AdmZip(targetZip);
+
+            await new Promise((resolve, reject) => {
+                zip.extractAllToAsync(extractPath, true, false, (error) => {
+                    if (error) {
+                        return reject(error);
+                    }
+                    resolve();
+                });
+            });
+
+        } catch (err) {
+            console.error(`Failed to unzip file ${targetZip} to ${extractPath}:`, err);
+            throw err;
+        }
     }
 
     async function illustHandler(json) {
@@ -126,11 +161,11 @@ async function download(sessionKey, artworkId, downloadDir) {
                 isFailed = true;
             }
         });
-        
+
         await Promise.all(downloadPromises);
         return !isFailed;
     }
-    
+
     async function ugoiraHandler(json) {
         const originalURL = json["body"]["originalSrc"];
         try {
@@ -143,7 +178,7 @@ async function download(sessionKey, artworkId, downloadDir) {
             const CONCAT_FILE_PATH = TEMP_DIR + "/inputs.txt";
             try {
                 let concatFileContent = "";
-                json["body"]["frames"].forEach(data => { 
+                json["body"]["frames"].forEach(data => {
                     const fileName = data["file"];
                     const duration = data["delay"] / 1000;
                     const absoluteImagePath = path.resolve(extractPath, fileName);
@@ -163,7 +198,7 @@ async function download(sessionKey, artworkId, downloadDir) {
                             '-loop', '0'
                         ])
                         .save(OUTPUT_PATH)
-                        .on('end', () => {                            
+                        .on('end', () => {
                             try {
                                 fs.unlinkSync(CONCAT_FILE_PATH);
                                 resolve();
@@ -194,8 +229,8 @@ async function download(sessionKey, artworkId, downloadDir) {
 
     /* ======================= INTERNALLY USED FUNCTIONS DEFINE END ======================= */
 
-    var res = await fetch("https://www.pixiv.net/ajax/illust/" + IID + "?lang=ja", 
-        { method: "GET", headers: universalHeader });
+    var res = await fetch("https://www.pixiv.net/ajax/illust/" + IID + "?lang=ja",
+        { method: "GET", headers: headers });
     var json = res.ok ? await res.json() : null;
 
     var result = {
@@ -204,10 +239,10 @@ async function download(sessionKey, artworkId, downloadDir) {
         "uuid": UUID
     };
 
-    const artworkTypes = {0: "ILLUST", 1: "MANGA", 2: "UGOIRA"};
-    const ratingTypes = {0: "ALL_AGE", 1: "R18", 2: "R18G"};
+    const artworkTypes = { 0: "ILLUST", 1: "MANGA", 2: "UGOIRA" };
+    const ratingTypes = { 0: "ALL_AGE", 1: "R18", 2: "R18G" };
 
-    if ( json ) {
+    if (json) {
         /* ======================= ARTWORK DATA START ======================= */
         var artworkData = {};
 
@@ -226,21 +261,20 @@ async function download(sessionKey, artworkId, downloadDir) {
         /* ======================= ARTWORK DATA END ======================= */
 
         // UGOIRA
-        if ( json["body"]["illustType"] == 2 ) 
-        {
-            var res = await fetch("https://www.pixiv.net/ajax/illust/" + IID + "/ugoira_meta?lang=ja", { method: "GET", headers: universalHeader });
+        if (json["body"]["illustType"] == 2) {
+            var res = await fetch("https://www.pixiv.net/ajax/illust/" + IID + "/ugoira_meta?lang=ja", { method: "GET", headers: headers });
             res = res.ok ? await res.json() : null;
-            if ( res ) {
+            if (res) {
                 result["success"] = await ugoiraHandler(res);
-            } 
+            }
         } else // Illust or Manga.
         {
-            var res = await fetch("https://www.pixiv.net/ajax/illust/" + IID + "/pages?lang=ja", { method: "GET", headers: universalHeader });
+            var res = await fetch("https://www.pixiv.net/ajax/illust/" + IID + "/pages?lang=ja", { method: "GET", headers: headers });
             res = res.ok ? await res.json() : null;
-            if ( res ) {
+            if (res) {
                 result["success"] = await illustHandler(res);
             }
         }
-    } 
+    }
     return result;
 }
