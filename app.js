@@ -1,14 +1,7 @@
-/* 
-1. This is now using Selenium (program to controll browser) for bypass Pixiv's WAF. However this could and would get patched very easily.
-2. Solution I am currently looking into is, simulate a normal user's behavior, 
- and catch and analysis API call & response actually made by browser (website) itself to bypass future potential patch.
-3. Current version is could and would patched. Because it's simply using session data of actuall browser.
-4. Please feel free to give feedback!
- */
 import { Builder, By, Browser, until, Key } from 'selenium-webdriver';
 import chrome from 'selenium-webdriver/chrome.js';
 import { createWriteStream } from 'fs';
-import { unlink, mkdir, writeFile, stat } from 'fs/promises';
+import { unlink, mkdir, writeFile, stat, rename, rm } from 'fs/promises';
 import { pipeline } from 'stream/promises';
 import { dirname, resolve as resolvePath } from 'path';
 import path from 'path';
@@ -27,12 +20,11 @@ const rl = readline.createInterface({
 const ask = (q) =>
     new Promise((r) => rl.question(q, (ans) => r(ans)));
 
-const waitLoaded = async () => {
-    await driver.wait(async () => {
-        const readyState = await driver.executeScript('return document.readyState');
-        return readyState === 'complete';
-    }, 10000);
-}
+/*
+Pixivが適応したWAFにより、クラウドフレア系のヘッダ情報が必要である。
+それがWAFを突破している必要があり、なおかつ本物のブラウザのようにアクトするためには、このような実装を行う。
+*/
+
 
 const options = new chrome.Options()
     .addArguments('--disable-blink-features=AutomationControlled')
@@ -44,13 +36,12 @@ const driver = await new Builder()
     .build();
 
 await driver.get("https://www.pixiv.net");
+// セッションオーバーライドでログイン
 const cookie = await driver.manage().getCookie('PHPSESSID');
 await driver.manage().deleteCookie('PHPSESSID');
 await driver.manage().addCookie({
     name: 'PHPSESSID',
-    /* 有効なセッションIDを入力！ */
-    value: 'REPLACE_ME_REPLACE_ME_REPLACE_ME_REPLACE_ME', 
-    /* 有効なセッションIDを入力！ */
+    value: 'REPLACE_ME_NOW' /* Replace with Working Key */,
     domain: cookie.domain,
     path: cookie.path,
     secure: cookie.secure,
@@ -58,12 +49,7 @@ await driver.manage().addCookie({
     sameSite: cookie.sameSite
 });
 
-await driver.get("https://www.pixiv.net");
-
-
-await ask('Are the browser logged in? type something to continue...');
-
-const IID = await ask("Illust Id? ");
+const IID = await ask("イラストのIDを入力してください： ");
 const result = await download(IID);
 if (result["success"]) {
     const data = result["data"];
@@ -72,14 +58,15 @@ if (result["success"]) {
     console.log("-=".repeat(11).slice(1));
 }
 
-await driver.quit();
 
-async function download(sessionKey, artworkId, downloadDir) {
+async function download(artworkId) {
+    const IID = artworkId;
+    // 仮フォルダの作成。
     const UUID = crypto.randomBytes(16).toString("hex");
-    // TEMP DIR CREATION
     const TEMP_DIR = "./temp/" + UUID;
     await mkdir(TEMP_DIR, { recursive: true });
 
+    // ヘッダを作成
     const headers = {
         'User-Agent': await driver.executeScript('return navigator.userAgent'),
         'Cookie': (await driver.manage().getCookies()).map(c => `${c.name}=${c.value}`).join('; '),
@@ -165,8 +152,13 @@ async function download(sessionKey, artworkId, downloadDir) {
     }
 
     async function ugoiraHandler(json) {
+        /* 
+        うごイラは、画像一覧とそのduration情報等のみが取得でき、エンコードされた映像データー等を得ることができない。
+        よって、そのエンコードを実装する。
+        */
         const originalURL = json["body"]["originalSrc"];
         try {
+            // zip格納のため、保存展開する。
             const zipSavePath = TEMP_DIR + "/data.zip";
             await fetchSave(originalURL, zipSavePath);
             const extractPath = TEMP_DIR + "/extracted";
@@ -174,6 +166,7 @@ async function download(sessionKey, artworkId, downloadDir) {
             await unlink(zipSavePath);
             const OUTPUT_PATH = TEMP_DIR + "/encoded.gif";
             const CONCAT_FILE_PATH = TEMP_DIR + "/inputs.txt";
+            // 処理する。
             try {
                 let concatFileContent = "";
                 json["body"]["frames"].forEach(data => {
@@ -227,6 +220,7 @@ async function download(sessionKey, artworkId, downloadDir) {
 
     /* ======================= INTERNALLY USED FUNCTIONS DEFINE END ======================= */
 
+    // イラスト情報を取得する。
     var res = await fetch("https://www.pixiv.net/ajax/illust/" + IID + "?lang=ja",
         { method: "GET", headers: headers });
     var json = res.ok ? await res.json() : null;
@@ -237,6 +231,7 @@ async function download(sessionKey, artworkId, downloadDir) {
         "uuid": UUID
     };
 
+    // その種別を定義しておく。
     const artworkTypes = { 0: "ILLUST", 1: "MANGA", 2: "UGOIRA" };
     const ratingTypes = { 0: "ALL_AGE", 1: "R18", 2: "R18G" };
 
@@ -244,6 +239,7 @@ async function download(sessionKey, artworkId, downloadDir) {
         /* ======================= ARTWORK DATA START ======================= */
         var artworkData = {};
 
+        // 使うであろうデーターを抜き取る。
         artworkData["title"] = json["body"]["illustTitle"];
         artworkData["description"] = json["body"]["illustComment"];
         artworkData["is_original"] = json["body"]["isOriginal"];
@@ -258,15 +254,16 @@ async function download(sessionKey, artworkId, downloadDir) {
         result["data"] = artworkData;
         /* ======================= ARTWORK DATA END ======================= */
 
-        // UGOIRA
+        // うごイラの時の処理はこれ。
         if (json["body"]["illustType"] == 2) {
+            // pixivはgifもしくはmp4でうごイラを返す代わりに、画像一覧で返しクライアントで統合させている。
             var res = await fetch("https://www.pixiv.net/ajax/illust/" + IID + "/ugoira_meta?lang=ja", { method: "GET", headers: headers });
             res = res.ok ? await res.json() : null;
             if (res) {
                 result["success"] = await ugoiraHandler(res);
             }
-        } else // Illust or Manga.
-        {
+        } else // イラスト or マンガの処理。
+        {   // 内部的には同じである。
             var res = await fetch("https://www.pixiv.net/ajax/illust/" + IID + "/pages?lang=ja", { method: "GET", headers: headers });
             res = res.ok ? await res.json() : null;
             if (res) {
