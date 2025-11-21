@@ -19,10 +19,6 @@ import ffmpeg from 'fluent-ffmpeg';
 import crypto from 'crypto';
 import readline from 'readline';
 
-setInterval(function () {
-    /* Just for keep this running */
-}, 1000);
-
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -75,6 +71,8 @@ if (result["success"]) {
     console.log("データー：\n" + JSON.stringify(data));
     console.log("-=".repeat(11).slice(1));
 }
+
+await driver.quit();
 
 async function download(sessionKey, artworkId, downloadDir) {
     const UUID = crypto.randomBytes(16).toString("hex");
