@@ -1,7 +1,7 @@
 # pixiv-dl-nodejs
 Pixivダウンローダーです。
 
-https://pixiv.net/
+https://www.pixiv.net/
 
 **自己責任**でご利用ください。
 
@@ -12,7 +12,8 @@ https://pixiv.net/
 
 # 依存関係のインストール
 これを実行するだけ：
-`npm install node-fetch adm-zip fluent-ffmpeg`
+`npm install node-fetch adm-zip fluent-ffmpeg selenium-webdriver`
+また、ffmpegのインストールが別途必要です。
 
 # テスト済み環境
 **nodejs** v23.3.0
